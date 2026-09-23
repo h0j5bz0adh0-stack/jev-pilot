@@ -18,6 +18,9 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = []
 
+[project.scripts]
+jev-pilot = "jev_pilot.setup:main"
+
 [project.urls]
 Homepage = "https://github.com/h0j5bz0adh0-stack/jev-pilot"
 Repository = "https://github.com/h0j5bz0adh0-stack/jev-pilot.git"

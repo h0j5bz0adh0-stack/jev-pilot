@@ -51,11 +51,31 @@ pip install -e .
 
 ---
 
-## 🔑 Quickstart
+## 🔑 Setup & API Key Configuration
 
-Set your API key:
+Get your API key at: [https://console.typesafe.ai](https://console.typesafe.ai)
+
+### Option 1: One-liner Setup CLI (Recommended for humans & AI Agents)
+Run in terminal (or let your AI coding agent run it):
 ```bash
-export TYPESAFE_API_KEY="your_typesafe_api_key_here"
+jev-pilot
+# or: python -m jev_pilot.setup <your_api_key>
+```
+This saves the key to `~/.jev_pilot/config.json`. Once configured, all agents and code initialize with zero parameters:
+```python
+from jev_pilot import JevPilot
+pilot = JevPilot()  # Automatically picks up saved key!
+```
+
+### Option 2: Environment Variable
+```bash
+export TYPESAFE_API_KEY="your_api_key_here"
+```
+
+### Option 3: Direct in Python
+```python
+from jev_pilot import JevPilot
+pilot = JevPilot(api_key="your_api_key_here")
 ```
 
 ```python

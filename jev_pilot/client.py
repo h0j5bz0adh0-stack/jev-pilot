@@ -48,11 +48,50 @@ class JevPilot:
     Compatible with any LLM framework or standalone agent.
     """
     def __init__(self, api_key: Optional[str] = None, endpoint: str = ENDPOINT, default_model: str = "jev-latest"):
-        self.api_key = api_key or os.environ.get("TYPESAFE_API_KEY") or os.environ.get("JEV_API_KEY")
+        self.api_key = (
+            api_key 
+            or os.environ.get("TYPESAFE_API_KEY") 
+            or os.environ.get("JEV_API_KEY") 
+            or self._load_from_saved_config()
+        )
         if not self.api_key:
-            raise ValueError("TypeSafe API Key required. Pass api_key or set TYPESAFE_API_KEY env var.")
+            raise ValueError(
+                "TypeSafe Jev API Key not found!\n"
+                "Please do one of the following:\n"
+                "  1. Run in terminal: jev-pilot setup (or python -m jev_pilot.setup)\n"
+                "  2. Pass in Python: JevPilot(api_key='...')\n"
+                "  3. Set environment variable: export TYPESAFE_API_KEY='...'\n"
+                "Get your free key at: https://console.typesafe.ai"
+            )
         self.endpoint = endpoint
         self.default_model = default_model
+
+    @staticmethod
+    def _config_path() -> str:
+        return os.path.expanduser("~/.jev_pilot/config.json")
+
+    @classmethod
+    def _load_from_saved_config(cls) -> Optional[str]:
+        p = cls._config_path()
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    return cfg.get("api_key")
+            except Exception:
+                return None
+        return None
+
+    @classmethod
+    def configure(cls, api_key: str):
+        """
+        Permanently saves the API key to ~/.jev_pilot/config.json for easy agent/tool use.
+        """
+        p = cls._config_path()
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"api_key": api_key.strip()}, f, indent=2)
+        return f"Successfully saved Jev API key to {p}"
 
     def _post(self, payload: Dict[str, Any], timeout: float = 10.0) -> Dict[str, Any]:
         req = urllib.request.Request(
