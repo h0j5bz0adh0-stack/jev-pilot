@@ -3,6 +3,8 @@
 > **Fast System-1 Decision, Arbitration & Safety Engine for Autonomous AI Agents**  
 > Works with any LLM: Claude, GPT, Gemini, Llama, Hermes, DeepSeek, and custom agent runtimes.
 
+**[🇮🇷 راهنمای فارسی (Persian Documentation)](./README.fa.md)**
+
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Powered by TypeSafe Jev](https://img.shields.io/badge/Powered%20by-TypeSafe%20Jev-10b981.svg)](https://typesafe.ai)
