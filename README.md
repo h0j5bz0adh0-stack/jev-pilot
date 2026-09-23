@@ -38,17 +38,35 @@ Modern LLMs (System 2) are brilliant at creative thought and deep reasoning, but
 
 ---
 
-## 📦 Installation
+## 📦 1-Line Universal Install (For Humans & AI Agents)
+
+You or any AI agent (Claude Code, Cursor, Codex, Hermes) can install and configure everything in **one single command**:
 
 ```bash
-pip install jev-pilot
+curl -fsSL https://raw.githubusercontent.com/h0j5bz0adh0-stack/jev-pilot/main/install.sh | bash -s -- apikey_xxxxxx
+```
+*(If you omit the API key, you can configure it later via `jev-pilot` or Python).*
+
+Or standard pip install:
+```bash
+pip install git+https://github.com/h0j5bz0adh0-stack/jev-pilot.git
 ```
 
-Or install from source:
-```bash
-git clone https://github.com/h0j5bz0adh0-stack/jev-pilot.git
-cd jev-pilot
-pip install -e .
+---
+
+## 🤖 AI Agent Integration (Universal Skill)
+
+`jev-pilot` includes a universal agent specification in **[`SKILL.md`](./SKILL.md)**.  
+Any AI coding tool (Claude Code, OpenAI Codex, Cursor, AutoGen, CrewAI, Hermes) can instantly read and use this skill:
+
+```python
+from jev_pilot import JevPilot
+
+# Set once with save=True, permanently remembered!
+pilot = JevPilot(api_key="apikey_xxxx", save=True)
+
+# From then on, anywhere in any project:
+pilot = JevPilot()
 ```
 
 ---

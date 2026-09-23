@@ -36,17 +36,35 @@
 
 ---
 
-## 📦 نحوه نصب
+## 📦 نصب تک‌خطی و فوق‌العاده سریع (برای انسان و تمام هوش مصنوعی‌ها)
+
+شما یا هر ایجنتی (Claude Code، Cursor، Codex، Hermes و...) می‌توانید با **یک تک‌دستور ساده** پکیج را نصب و توکن را ست کنید:
 
 ```bash
-pip install jev-pilot
+curl -fsSL https://raw.githubusercontent.com/h0j5bz0adh0-stack/jev-pilot/main/install.sh | bash -s -- apikey_xxxxxx
+```
+*(اگر کلید را نزنید، بعداً می‌توانید از طریق کد پایتون یا دستور `jev-pilot` وارد کنید).*
+
+یا روش استاندارد pip:
+```bash
+pip install git+https://github.com/h0j5bz0adh0-stack/jev-pilot.git
 ```
 
-یا مستقیماً از سورس گیت‌هاب:
-```bash
-git clone https://github.com/h0j5bz0adh0-stack/jev-pilot.git
-cd jev-pilot
-pip install -e .
+---
+
+## 🤖 اتصال به تمام هوش مصنوعی‌ها (Universal Skill)
+
+این مخزن شامل فایل استاندارد **[`SKILL.md`](./SKILL.md)** است. هر ایجنتی مثل Claude Code یا Cursor می‌تواند این فایل را مستقیماً لود کند و یاد بگیرد چطور تصمیم بگیرد.
+
+علاوه بر این، در پایتون فقط کافیست یک‌بار پارامتر `save=True` را بفرستید تا برای همیشه ذخیره شود:
+```python
+from jev_pilot import JevPilot
+
+# بار اول توکن رو میدی و برای همیشه ذخیره میشه:
+pilot = JevPilot(api_key="apikey_xxxx", save=True)
+
+# از این به بعد در تمام پروژه‌ها و اسکریپت‌ها بدون نیاز به هیچ کدی:
+pilot = JevPilot()
 ```
 
 ---

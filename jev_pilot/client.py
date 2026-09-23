@@ -47,22 +47,27 @@ class JevPilot:
     Core client for Jev System-1 Decision Engine.
     Compatible with any LLM framework or standalone agent.
     """
-    def __init__(self, api_key: Optional[str] = None, endpoint: str = ENDPOINT, default_model: str = "jev-latest"):
-        self.api_key = (
+    def __init__(self, api_key: Optional[str] = None, endpoint: str = ENDPOINT, default_model: str = "jev-latest", save: bool = False):
+        resolved_key = (
             api_key 
             or os.environ.get("TYPESAFE_API_KEY") 
             or os.environ.get("JEV_API_KEY") 
             or self._load_from_saved_config()
         )
-        if not self.api_key:
+        if not resolved_key:
             raise ValueError(
                 "TypeSafe Jev API Key not found!\n"
                 "Please do one of the following:\n"
-                "  1. Run in terminal: jev-pilot setup (or python -m jev_pilot.setup)\n"
-                "  2. Pass in Python: JevPilot(api_key='...')\n"
+                "  1. Pass in Python: JevPilot(api_key='...', save=True)\n"
+                "  2. Run in terminal: jev-pilot setup <your_api_key>\n"
                 "  3. Set environment variable: export TYPESAFE_API_KEY='...'\n"
-                "Get your free key at: https://console.typesafe.ai"
+                "Get your key at: https://console.typesafe.ai"
             )
+        
+        if api_key and save:
+            self.configure(api_key)
+
+        self.api_key = resolved_key
         self.endpoint = endpoint
         self.default_model = default_model
 
