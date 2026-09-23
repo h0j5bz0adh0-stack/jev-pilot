@@ -4,7 +4,7 @@ import time
 import urllib.request
 import urllib.error
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Literal
 
 ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 
@@ -24,6 +24,7 @@ class SafetyResult:
     danger_score: float
     action_type: str
     latency: float
+    error: Optional[str] = None
     raw: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
@@ -42,12 +43,28 @@ class FactResult:
     latency: float
     raw: Dict[str, Any] = field(default_factory=dict)
 
+@dataclass
+class RouteResult:
+    route: str
+    confidence: float
+    probabilities: Dict[str, float]
+    latency: float
+    raw: Dict[str, Any] = field(default_factory=dict)
+
 class JevPilot:
     """
     Core client for Jev System-1 Decision Engine.
     Compatible with any LLM framework or standalone agent.
     """
-    def __init__(self, api_key: Optional[str] = None, endpoint: str = ENDPOINT, default_model: str = "jev-latest", save: bool = False):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        endpoint: str = ENDPOINT,
+        default_model: str = "jev-latest",
+        timeout: float = 3.0,
+        max_retries: int = 2,
+        save: bool = False
+    ):
         resolved_key = (
             api_key 
             or os.environ.get("TYPESAFE_API_KEY") 
@@ -70,6 +87,8 @@ class JevPilot:
         self.api_key = resolved_key
         self.endpoint = endpoint
         self.default_model = default_model
+        self.timeout = timeout
+        self.max_retries = max_retries
 
     @staticmethod
     def _config_path() -> str:
@@ -90,41 +109,66 @@ class JevPilot:
     @classmethod
     def configure(cls, api_key: str):
         """
-        Permanently saves the API key to ~/.jev_pilot/config.json for easy agent/tool use.
+        Permanently saves the API key with 0o600 permissions (user-only read/write).
         """
         p = cls._config_path()
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        mode = 0o600
+        fd = os.open(p, flags, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump({"api_key": api_key.strip()}, f, indent=2)
-        return f"Successfully saved Jev API key to {p}"
-
-    def _post(self, payload: Dict[str, Any], timeout: float = 10.0) -> Dict[str, Any]:
-        req = urllib.request.Request(
-            self.endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "jev-pilot/0.1.0"
-            },
-            method="POST"
-        )
-        t0 = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                data["_latency_sec"] = round(time.time() - t0, 3)
-                return data
-        except urllib.error.HTTPError as e:
-            err_text = e.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"TypeSafe Jev API HTTP {e.code}: {err_text}")
-        except Exception as e:
-            raise RuntimeError(f"TypeSafe Jev API Error: {e}")
+            os.chmod(p, 0o600)
+        except Exception:
+            pass
+        return f"Successfully saved Jev API key securely to {p}"
 
-    def arbitrate(self, context: str, candidates: Dict[str, str], criteria_instruction: str = "Which candidate solution has the highest probability of robust execution and success?") -> DecisionResult:
+    def _post(self, payload: Dict[str, Any], timeout: Optional[float] = None) -> Dict[str, Any]:
+        call_timeout = timeout or self.timeout
+        encoded_data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "jev-pilot/0.1.1"
+        }
+
+        last_err = None
+        for attempt in range(self.max_retries + 1):
+            req = urllib.request.Request(self.endpoint, data=encoded_data, headers=headers, method="POST")
+            t0 = time.time()
+            try:
+                with urllib.request.urlopen(req, timeout=call_timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    data["_latency_sec"] = round(time.time() - t0, 3)
+                    return data
+            except urllib.error.HTTPError as e:
+                err_text = e.read().decode("utf-8", errors="ignore")
+                if e.code in (429, 500, 502, 503, 504) and attempt < self.max_retries:
+                    time.sleep(0.3 * (2 ** attempt))
+                    continue
+                raise RuntimeError(f"TypeSafe Jev API HTTP {e.code}: {err_text}")
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                last_err = e
+                if attempt < self.max_retries:
+                    time.sleep(0.2 * (2 ** attempt))
+                    continue
+                raise RuntimeError(f"TypeSafe Jev API Network Error: {e}")
+
+        raise RuntimeError(f"TypeSafe Jev API Request Failed after {self.max_retries} retries: {last_err}")
+
+    def arbitrate(
+        self,
+        context: str,
+        candidates: Dict[str, str],
+        criteria_instruction: str = "Which candidate solution has the highest probability of robust execution and success?"
+    ) -> DecisionResult:
         """
         Arbitrate between multiple candidate responses or execution paths (Best-of-N).
         """
+        if not candidates:
+            raise ValueError("Candidates dictionary cannot be empty.")
+
         payload = {
             "model": self.default_model,
             "state": f"Context / Task Details:\n{context}",
@@ -144,9 +188,10 @@ class JevPilot:
         answers = res.get("answers", {})
         win_info = answers.get("winner", {})
         risk_info = answers.get("high_risk", {})
+        chosen = win_info.get("choice", "")
 
         return DecisionResult(
-            winner=win_info.get("choice", ""),
+            winner=chosen,
             confidence=win_info.get("confidence", 0.0),
             probabilities=win_info.get("probabilities", {}),
             risk_score=risk_info.get("noul", 0.0),
@@ -155,9 +200,17 @@ class JevPilot:
             raw=res
         )
 
-    def guard(self, proposed_action: str, current_state: str, risk_threshold: float = 0.6) -> SafetyResult:
+    def guard(
+        self,
+        proposed_action: str,
+        current_state: str,
+        risk_threshold: float = 0.6,
+        on_error: Literal["fail_closed", "fail_open"] = "fail_closed"
+    ) -> SafetyResult:
         """
         Fast guardrail to verify safety before executing tools, commands, or DB mutations.
+        on_error="fail_closed": Blocks action if API times out or fails (safest).
+        on_error="fail_open": Allows action if API fails (avoids agent crash on network blip).
         """
         payload = {
             "model": self.default_model,
@@ -178,19 +231,35 @@ class JevPilot:
                 }
             }
         }
-        res = self._post(payload)
-        answers = res.get("answers", {})
-        danger = answers.get("danger_check", {}).get("noul", 0.0)
-        cat = answers.get("action_type", {}).get("choice", "")
-
-        is_allowed = (danger < risk_threshold) and (cat != "destructive")
-        return SafetyResult(
-            allowed=is_allowed,
-            danger_score=danger,
-            action_type=cat,
-            latency=res.get("_latency_sec", 0.0),
-            raw=res
-        )
+        try:
+            res = self._post(payload)
+            answers = res.get("answers", {})
+            danger = answers.get("danger_check", {}).get("noul", 0.0)
+            cat = answers.get("action_type", {}).get("choice", "")
+            is_allowed = (danger < risk_threshold) and (cat != "destructive")
+            return SafetyResult(
+                allowed=is_allowed,
+                danger_score=danger,
+                action_type=cat,
+                latency=res.get("_latency_sec", 0.0),
+                raw=res
+            )
+        except Exception as e:
+            if on_error == "fail_open":
+                return SafetyResult(
+                    allowed=True,
+                    danger_score=0.0,
+                    action_type="unknown_fail_open",
+                    latency=0.0,
+                    error=str(e)
+                )
+            return SafetyResult(
+                allowed=False,
+                danger_score=1.0,
+                action_type="error_fail_closed",
+                latency=0.0,
+                error=str(e)
+            )
 
     def check_stuck(self, trajectory_history: Union[str, List[str]], threshold_confidence: float = 0.7) -> StuckResult:
         """
@@ -273,9 +342,10 @@ class JevPilot:
             raw=res
         )
 
-    def route(self, prompt: str, routes: Dict[str, str]) -> Dict[str, Any]:
+    def route(self, prompt: str, routes: Dict[str, str]) -> RouteResult:
         """
         Ultra-fast intent routing to appropriate model/tool/agent.
+        Returns a standardized RouteResult dataclass.
         """
         payload = {
             "model": self.default_model,
@@ -290,9 +360,10 @@ class JevPilot:
         }
         res = self._post(payload)
         r_info = res.get("answers", {}).get("route", {})
-        return {
-            "route": r_info.get("choice"),
-            "confidence": r_info.get("confidence"),
-            "probabilities": r_info.get("probabilities", {}),
-            "latency": res.get("_latency_sec", 0.0)
-        }
+        return RouteResult(
+            route=r_info.get("choice", ""),
+            confidence=r_info.get("confidence", 0.0),
+            probabilities=r_info.get("probabilities", {}),
+            latency=res.get("_latency_sec", 0.0),
+            raw=res
+        )

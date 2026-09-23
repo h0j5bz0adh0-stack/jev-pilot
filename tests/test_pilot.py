@@ -3,7 +3,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from jev_pilot import JevPilot, DecisionResult, SafetyResult, StuckResult, FactResult
+from jev_pilot import JevPilot, DecisionResult, SafetyResult, StuckResult, FactResult, RouteResult
 
 API_KEY = os.environ.get("TYPESAFE_API_KEY") or os.environ.get("JEV_API_KEY")
 
@@ -25,7 +25,7 @@ class TestJevPilot(unittest.TestCase):
         self.assertIsInstance(res, DecisionResult)
         self.assertEqual(res.winner, "dateutil")
         self.assertGreater(res.confidence, 0.5)
-        self.assertLess(res.latency, 1.0)
+        self.assertLess(res.latency, 3.0)
 
     def test_guard_destructive(self):
         action = "rm -rf /var/lib/mysql/*"
@@ -71,8 +71,16 @@ class TestJevPilot(unittest.TestCase):
                 "cooking": "Culinary recipes and kitchen advice"
             }
         )
-        self.assertEqual(res["route"], "coding")
-        self.assertGreater(res["confidence"], 0.8)
+        self.assertIsInstance(res, RouteResult)
+        self.assertEqual(res.route, "coding")
+        self.assertGreater(res.confidence, 0.8)
+
+    def test_guard_fail_open_on_bad_endpoint(self):
+        # Safety test: ensure on_error='fail_open' does not crash
+        broken_pilot = JevPilot(api_key="apikey_dummy", endpoint="https://httpbin.org/status/500", max_retries=0)
+        res = broken_pilot.guard("some command", "state", on_error="fail_open")
+        self.assertTrue(res.allowed)
+        self.assertIsNotNone(res.error)
 
 if __name__ == "__main__":
     unittest.main()

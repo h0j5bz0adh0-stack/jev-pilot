@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jev-pilot"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fast System-1 Decision, Arbitration & Safety Engine for Autonomous AI Agents"
 readme = "README.md"
 authors = [{ name = "Reza Rajabzadeh", email = "h0j5bz0adh0@gmail.com" }]
@@ -24,3 +24,6 @@ jev-pilot = "jev_pilot.setup:main"
 [project.urls]
 Homepage = "https://github.com/h0j5bz0adh0-stack/jev-pilot"
 Repository = "https://github.com/h0j5bz0adh0-stack/jev-pilot.git"
+
+[tool.setuptools.package-data]
+jev_pilot = ["py.typed"]
