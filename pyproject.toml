@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jev-pilot"
+version = "0.1.0"
+description = "Fast System-1 Decision, Arbitration & Safety Engine for Autonomous AI Agents"
+readme = "README.md"
+authors = [{ name = "Reza Rajabzadeh", email = "h0j5bz0adh0@gmail.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/h0j5bz0adh0-stack/jev-pilot"
+Repository = "https://github.com/h0j5bz0adh0-stack/jev-pilot.git"
