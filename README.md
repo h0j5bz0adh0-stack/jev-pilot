@@ -22,9 +22,9 @@ However, using an LLM for **operational split-second decisions** inside an auton
 - 🎭 **Prone to Sycophancy & Hallucination:** LLMs often agree with broken assumptions just to please the prompt.
 
 **jev-pilot** gives your agent a **System 1 (fast, calibrated intuition)** using TypeSafe's Jev model:
-- ⚡ **Sub-second Latency:** Returns answers in **~0.3 seconds**.
-- 💰 **444x Cheaper:** $42 per billion input tokens (virtually free).
-- 🎯 **Calibrated Math:** Outputs exact probabilities and confidence distributions, not text strings.
+- ⚡ **Sub-second Latency:** Returns answers in **~0.3 seconds** *(based on TypeSafe internal published benchmarks and live API tests)*.
+- 💰 **Significantly Lower Cost:** $42 per billion input tokens according to TypeSafe pricing.
+- 🎯 **Calibrated Math:** Outputs exact probabilities and confidence distributions (`0.0` to `1.0`), not text strings.
 - 🛡️ **Zero Hallucination:** The model does not generate free text; it evaluates structured decisions deterministically.
 
 ---
@@ -56,16 +56,22 @@ pip install jev-pilot
 
 ---
 
-## 🔑 Setup & Authentication
+## 🔑 Setup & API Key Resolution
 
 Get your API key at [console.typesafe.ai](https://console.typesafe.ai).
 
+`jev-pilot` automatically resolves your API key in the following priority order:
+1. Direct argument passed to `JevPilot(api_key="...")`
+2. Environment variable: `TYPESAFE_API_KEY`
+3. Environment variable: `JEV_API_KEY`
+4. Secure persistent config file: `~/.jev_pilot/config.json` (saved with `chmod 600` user-only permissions)
+
 ### Option 1: In Python with Zero-Config Persistence (Recommended)
-Pass `save=True` once. It securely saves your key with `chmod 600` permissions:
+Pass `save=True` once — it is securely saved on your machine:
 ```python
 from jev_pilot import JevPilot
 
-# Run once — permanently remembered on this machine:
+# Run once:
 pilot = JevPilot(api_key="your_key_here", save=True)
 
 # From then on, anywhere in any project:
@@ -82,7 +88,7 @@ export TYPESAFE_API_KEY="your_key_here"
 ## 🚀 Core Features & Code Examples
 
 ### 1. Best-of-N Candidate Arbitration (`arbitrate`)
-Instead of trusting the first draft from an LLM, generate 2-3 approaches. `jev-pilot` picks the winning strategy with mathematical confidence in **0.3 seconds**:
+Instead of trusting the first draft from an LLM, generate 2-3 approaches. `jev-pilot` picks the winning strategy with mathematical confidence:
 
 ```python
 from jev_pilot import JevPilot
@@ -99,18 +105,24 @@ decision = pilot.arbitrate(
 )
 
 print(f"Winning Strategy: {decision.winner}")
-print(f"Confidence: {decision.confidence:.2%}")
-print(f"Probabilities: {decision.probabilities}")
+print(f"Confidence: {decision.confidence:.2%}")   # float between 0.0 and 1.0
+print(f"Probabilities: {decision.probabilities}") # dict of floats summing to ~1.0
 print(f"Latency: {decision.latency}s")
 ```
 
 ### 2. Pre-Execution Safety Guardrail (`guard`)
-Intercept dangerous shell commands, SQL drops, and destructive mutations before they run:
+Intercept dangerous shell commands, SQL drops, and destructive mutations before they run.
+
+**Error Handling Policy (`on_error`):**
+- `on_error="fail_closed"` (Default): If the API call times out or encounters network errors, the action is **blocked** (`allowed=False`) for maximum security.
+- `on_error="fail_open"`: If the API encounters network errors, the action is **allowed** (`allowed=True`) to prevent halting agent workflows during temporary network blips.
 
 ```python
 safety = pilot.guard(
     proposed_action="rm -rf /var/lib/mysql/*",
-    current_state="Production database server active"
+    current_state="Production database server active",
+    risk_threshold=0.6,          # float: 0.0 (strict) to 1.0 (lenient)
+    on_error="fail_closed"       # "fail_closed" or "fail_open"
 )
 
 if not safety.allowed:
@@ -128,7 +140,7 @@ history = [
     "tool terminal('curl http://localhost:8080') -> Connection refused"
 ]
 
-stuck = pilot.check_stuck(history)
+stuck = pilot.check_stuck(history, threshold_confidence=0.7)
 if stuck.is_stuck:
     print(f"⚠️ Agent trapped in loop (Confidence: {stuck.confidence:.2f}). Aborting retry.")
 ```
@@ -146,7 +158,7 @@ if fact.is_hallucination:
 ```
 
 ### 5. Ultra-Fast Intent Routing (`route`)
-Instantly route user prompts to the appropriate tool, agent, or model:
+Instantly route user prompts to the appropriate tool, agent, or model (returns `RouteResult`):
 
 ```python
 route_result = pilot.route(
@@ -157,32 +169,43 @@ route_result = pilot.route(
         "casual": "Small talk, greetings, general chatter"
     }
 )
-print(f"Target Route: {route_result.route} (Confidence: {route_result.confidence:.2f})")
+print(f"Target Route: {route_result.route}")
+print(f"Confidence: {route_result.confidence:.2f}")
+print(f"Probabilities: {route_result.probabilities}")
 ```
 
 ---
 
-## 🛡️ Clean Python Decorators
+## 📖 API Reference & Return Value Ranges
 
-Decorate your tools and functions directly:
+| Return Field | Type | Range / Values | Meaning |
+| :--- | :--- | :--- | :--- |
+| `confidence` | `float` | `0.0` to `1.0` | Mathematical calibration of model confidence in the decision. |
+| `probabilities` | `dict[str, float]` | Each `0.0` to `1.0` | Probability distribution across all candidate options. |
+| `danger_score` | `float` | `0.0` (Safe) to `1.0` (Critical) | Assessed risk score of proposed operation. |
+| `risk_score` | `float` | `0.0` (Safe) to `1.0` (Critical) | General task blocker or hallucination risk. |
+| `action_type` | `str` | `safe_read`, `reversible_write`, `destructive` | Categorization of tool action. |
 
-```python
-from jev_pilot import guardrail, best_of_n, loop_breaker
+### `JevPilot` Constructor Parameters
+- `api_key` (`Optional[str]`): TypeSafe API key.
+- `endpoint` (`str`): API endpoint (default: `https://api.typesafe.ai/v1/systemone`).
+- `default_model` (`str`): Target model (default: `jev-latest`).
+- `timeout` (`float`): Network timeout in seconds (default: `3.0`).
+- `max_retries` (`int`): Exponential backoff retry attempts for 429/5xx (default: `2`).
+- `save` (`bool`): If `True`, saves `api_key` securely to `~/.jev_pilot/config.json`.
 
-# 1. Protect risky tools
-@guardrail(risk_threshold=0.6, on_error="fail_closed")
-def execute_shell(command: str):
-    return subprocess.run(command, shell=True)
+---
 
-# 2. Automatically pick the best candidate
-@best_of_n()
-def propose_architecture(requirements: str):
-    return {
-        "microservices": "Docker swarm with 8 services",
-        "monolith": "FastAPI single-process with SQLite",
-        "serverless": "AWS Lambda functions"
-    }
-```
+## 🛠️ Troubleshooting & Exceptions
+
+- **`ValueError: TypeSafe Jev API Key not found!`**  
+  Occurs when no key is found via argument, env var, or config file. Fix: run `JevPilot(api_key="...", save=True)` once.
+- **`PermissionError: [jev-pilot Guardrail Blocked] ...`**  
+  Raised by `@guardrail` decorator when an operation exceeds `risk_threshold` or is categorized as `destructive`.
+- **`KeyError: [jev-pilot Arbitration Error] ...`**  
+  Raised if the API returns a winner identifier not present in the provided candidates dict.
+- **`RuntimeError: TypeSafe Jev API HTTP 429`**  
+  Rate limit exceeded. The client automatically retries up to `max_retries` with exponential backoff before raising.
 
 ---
 
